@@ -20,7 +20,7 @@ const productDescription =
 const brewInstall = "brew install openclaw/tap/gogcli";
 
 const sections = [
-  ["Start", ["index.md", "install.md", "quickstart.md", "auth-clients.md", "workspace-admin.md", "safety-profiles.md"]],
+  ["Start", ["index.md", "install.md", "quickstart.md", "auth-clients.md", "onepassword.md", "workspace-admin.md", "safety-profiles.md"]],
   ["Gmail", ["gmail-workflows.md", "gmail-autoreply.md", "watch.md", "email-tracking.md", "email-tracking-worker.md"]],
   ["Drive & Files", ["drive-audits.md", "raw-api.md", "raw-audit.md"]],
   ["Photos", ["photos-picker.md"]],

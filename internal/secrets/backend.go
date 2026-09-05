@@ -45,6 +45,11 @@ type OpenOptions struct {
 	OpenTimeout              time.Duration
 	LockTimeout              time.Duration
 	KeychainTrustApplication string
+	OPBin                    string
+	OPVault                  string
+	OPTokenFile              string
+	OPCacheTTL               time.Duration
+	OPTimeout                time.Duration
 	openKeyringFn            func(keyring.Config) (keyring.Keyring, error)
 	codesignRunner           func(string) ([]byte, error)
 }
@@ -75,6 +80,11 @@ func OpenOptionsFromLookup(
 	openTimeoutRaw, _ := lookup(keyringOpenTimeoutEnv)
 	lockTimeoutRaw, _ := lookup(keyringLockTimeoutEnv)
 	keychainTrustApplication, _ := lookup(keychainTrustApplicationEnv)
+	opBin, _ := lookup(opBinEnv)
+	opVault, _ := lookup(opVaultEnv)
+	opTokenFile, _ := lookup(opTokenFileEnv)
+	opCacheTTL, _ := lookup(opCacheTTLEnv)
+	opTimeout, _ := lookup(opTimeoutEnv)
 
 	return OpenOptions{
 		Layout:                   layout,
@@ -89,7 +99,27 @@ func OpenOptionsFromLookup(
 		OpenTimeout:              parseKeyringOpenTimeout(openTimeoutRaw, goos),
 		LockTimeout:              parseKeyringLockTimeout(lockTimeoutRaw),
 		KeychainTrustApplication: keychainTrustApplication,
+		OPBin:                    strings.TrimSpace(opBin),
+		OPVault:                  strings.TrimSpace(opVault),
+		OPTokenFile:              strings.TrimSpace(opTokenFile),
+		OPCacheTTL:               parseDurationEnv(opCacheTTL, 0),
+		OPTimeout:                parseDurationEnv(opTimeout, 0),
 	}
+}
+
+// parseDurationEnv parses a Go duration string, returning fallback (or 0) when
+// unset or invalid. op defaults are applied later in onePasswordConfig defaults.
+func parseDurationEnv(raw string, fallback time.Duration) time.Duration {
+	if raw == "" {
+		return fallback
+	}
+
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+
+	return d
 }
 
 func ResolveKeyringBackendInfoWithOptions(options OpenOptions) (KeyringBackendInfo, error) {
@@ -123,8 +153,13 @@ func allowedBackends(info KeyringBackendInfo) ([]keyring.BackendType, error) {
 		return []keyring.BackendType{keyring.KeychainBackend}, nil
 	case "file":
 		return []keyring.BackendType{keyring.FileBackend}, nil
+	case KeyringBackendOnePassword:
+		// 1Password is served by the op CLI backend, not the 99designs keyring
+		// registry; a nil slice here keeps openKeyringWithOptions from invoking
+		// keyring.Open for it. It must be handled before allowedBackends use.
+		return nil, nil
 	default:
-		return nil, fmt.Errorf("%w: %q (expected %s, keychain, or file)", errInvalidKeyringBackend, info.Value, keyringBackendAuto)
+		return nil, fmt.Errorf("%w: %q (expected %s, keychain, file, or %s)", errInvalidKeyringBackend, info.Value, keyringBackendAuto, KeyringBackendOnePassword)
 	}
 }
 
@@ -158,6 +193,12 @@ func fileKeyringPasswordFuncFrom(password string, passwordSet bool, isTTY bool) 
 
 func normalizeKeyringBackend(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+// NormalizeKeyringBackend case-folds backend values so config files,
+// environment, and CLI arguments agree on the value gog stores.
+func NormalizeKeyringBackend(value string) string {
+	return normalizeKeyringBackend(value)
 }
 
 func serviceNameFor(options OpenOptions) string {
@@ -248,6 +289,18 @@ func openKeyringWithOptions(options OpenOptions) (keyring.Keyring, error) {
 	backendInfo, err := ResolveKeyringBackendInfoWithOptions(options)
 	if err != nil {
 		return nil, err
+	}
+
+	// 1Password is served by the op CLI backend (no 99designs registry entry),
+	// so it must be routed before allowedBackends/keyring.Open.
+	if backendInfo.Value == KeyringBackendOnePassword {
+		safeRing, safeErr := newOnePasswordKeyring(options)
+		if safeErr != nil {
+			return nil, safeErr
+		}
+
+		// The ring is already wrapped for file safety only when file-backed.
+		return prepareKeyring(safeRing, backendInfo, false, false, options), nil
 	}
 
 	backends, err := allowedBackends(backendInfo)

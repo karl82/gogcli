@@ -15,6 +15,7 @@ const requiredFeatureDocs = [
   "install.md",
   "quickstart.md",
   "auth-clients.md",
+  "onepassword.md",
   "workspace-admin.md",
   "safety-profiles.md",
   "raw-api.md",

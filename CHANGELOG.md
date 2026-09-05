@@ -2,6 +2,7 @@
 
 ## 0.38.2 - Unreleased
 
+- Auth: add `onepassword` keyring backend storing OAuth client secrets and account tokens as 1Password API Credential items, with service-account token-file injection, schema-preserving create/edit for current `op` releases, and read-only `gog auth doctor` reachability diagnostics.
 - Sheets: preserve zero-valued sheet, row, and column indexes in Connected Sheets refresh status references, keeping A1 anchors identifiable. (#938) — thanks @ryo-touch.
 - Dependencies: prefer Go 1.27 while retaining Go 1.26 compatibility, refresh Google and MCP SDKs, update tracking worker dependencies and Go tooling, and refresh Docker build actions.
 

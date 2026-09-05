@@ -71,6 +71,9 @@ func (c *AuthDoctorCmd) Run(ctx context.Context, _ *RootFlags) error {
 		add("keyring.backend", doctorOK, backendInfo.Value+" (source: "+backendInfo.Source+")", "")
 		addKeychainTrustCheck(ctx, add, backendInfo)
 		addKeyringEnvChecks(ctx, add, backendInfo)
+		if backendInfo.Value == secrets.KeyringBackendOnePassword {
+			addOPDoctorChecks(ctx, add)
+		}
 	}
 
 	store, storeErr := openAuthSecretsStore(ctx)
@@ -177,6 +180,26 @@ func addKeychainTrustCheck(ctx context.Context, add func(string, string, string,
 	add("keychain.trust", doctorOK, detail, "")
 }
 
+// addOPDoctorChecks surfaces 1Password backend health when the resolved
+// keyring backend is "onepassword": binary, version, sign-in, vault, token
+// source, cache, and rate-limit policy.
+func addOPDoctorChecks(ctx context.Context, add func(string, string, string, string)) {
+	appRuntime, ok := app.FromContext(ctx)
+	if !ok || appRuntime.KeyringOptions == nil {
+		return
+	}
+
+	options, err := runtimeKeyringOpenOptions(appRuntime)
+	if err != nil {
+		add("op.config", doctorError, err.Error(), "")
+		return
+	}
+
+	for _, entry := range secrets.OPDiagnostics(ctx, options) {
+		add(entry.Name, entry.Status, entry.Detail, entry.Hint)
+	}
+}
+
 func authDoctorTokenCheckName(prefix string, client string, email string) string {
 	client = strings.TrimSpace(client)
 	if client == "" {
@@ -273,6 +296,8 @@ func classifyAuthDoctorError(err error) (status string, hint string) {
 	}
 	msg := strings.ToLower(err.Error())
 	switch {
+	case strings.Contains(msg, "1password (op)"):
+		return doctorError, secrets.OPErrorHint(err)
 	case strings.Contains(msg, "aes.keyunwrap") || strings.Contains(msg, "integrity check failed"):
 		return doctorError, "file keyring password mismatch or corrupted entry; make every GOG_KEYRING_PASSWORD definition match, then re-run `gog auth doctor --check`"
 	case strings.Contains(msg, "invalid_rapt"):

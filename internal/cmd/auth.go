@@ -76,12 +76,15 @@ func fetchAuthIdentity(
 	return googleauth.Identity{}, fmt.Errorf("%w: authorized identity", errRuntimeServiceRequired)
 }
 
+// ensureKeychainAccessIfNeeded guards macOS keychain permission prompts and
+// file-only flows. The 1Password backend talks to the op CLI (its own auth),
+// so no macOS keychain trust step applies.
 func ensureKeychainAccessIfNeeded(ctx context.Context) error {
 	backendInfo, err := resolveKeyringBackendInfo(ctx)
 	if err != nil {
 		return fmt.Errorf("resolve keyring backend: %w", err)
 	}
-	if backendInfo.Value == strFile {
+	if backendInfo.Value == strFile || backendInfo.Value == secrets.KeyringBackendOnePassword {
 		return nil
 	}
 	if runtime, ok := app.FromContext(ctx); ok && runtime.Auth.EnsureKeychainAccess != nil {

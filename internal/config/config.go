@@ -14,6 +14,9 @@ import (
 
 type File struct {
 	KeyringBackend  string            `json:"keyring_backend,omitempty"`
+	OPBin           string            `json:"op_bin,omitempty"`
+	OPVault         string            `json:"op_vault,omitempty"`
+	OPTokenFile     string            `json:"op_token_file,omitempty"`
 	DefaultTimezone string            `json:"default_timezone,omitempty"`
 	YoutubeAPIKey   string            `json:"youtube_api_key,omitempty"`
 	PlacesAPIKey    string            `json:"places_api_key,omitempty"`
