@@ -594,8 +594,8 @@ func (k *onePasswordKeyring) Set(item keyring.Item) error {
 	if uuid == "" {
 		err = k.createItem(item.Key, string(item.Data))
 	} else {
-		if !k.isGogOwnedTitle(item.Key) {
-			return fmt.Errorf("refusing to edit non-gog vault item %q: title matches but item was not created by gog", item.Key)
+		if !k.isGogOwned(uuid, item.Key) {
+			return fmt.Errorf("refusing to edit non-gog vault item %q: item was not created by gog", item.Key)
 		}
 		err = k.editItem(uuid, string(item.Data))
 	}
@@ -727,8 +727,8 @@ func (k *onePasswordKeyring) removePhysicalAlias(key string) error {
 	if uuid == "" {
 		return fmt.Errorf("%w: no 1Password item for %q", keyring.ErrKeyNotFound, key)
 	}
-	if !k.isGogOwnedTitle(key) {
-		return fmt.Errorf("refusing to delete non-gog vault item %q: title matches but item was not created by gog", key)
+	if !k.isGogOwned(uuid, key) {
+		return fmt.Errorf("refusing to delete non-gog vault item %q: item was not created by gog", key)
 	}
 	args := append([]string{"item", "delete", uuid}, k.vaultArgs()...)
 	if _, err := k.runOp(context.Background(), args...); err != nil {
@@ -824,11 +824,28 @@ func onePasswordCanonicalTokenKey(key string) bool {
 	return ok && client != "" && email != "" && key == tokenKey(client, email)
 }
 
-// isGogOwnedTitle checks whether a vault item title matches gog's naming
-// convention (token:<backend>:<email> or client/<backend>/<id>/client-secret).
-// This prevents editing or deleting unrelated vault items that happen to share
-// a title with a gog key.
-func (k *onePasswordKeyring) isGogOwnedTitle(title string) bool {
+// isGogOwned verifies that a vault item was created by gog by checking for the
+// gog_keyring=1 marker in the item's notesPlain field. This prevents editing or
+// deleting unrelated vault items that happen to share a title with a gog key.
+// Falls back to title-pattern matching if the item cannot be fetched.
+func (k *onePasswordKeyring) isGogOwned(uuid, title string) bool {
+	raw, err := k.fetchRawByUUID(uuid)
+	if err == nil {
+		var item opFullItem
+		if json.Unmarshal(raw, &item) == nil {
+			for _, f := range item.Fields {
+				// Production items use notesPlain; test harness uses a dedicated field.
+				if (f.ID == "notesPlain" || strings.EqualFold(f.Label, "notesPlain")) && strings.Contains(f.Value, "gog_keyring=1") {
+					return true
+				}
+				if f.ID == "gog_keyring" && f.Value == "1" {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	// Fallback: title-pattern match when fetch fails.
 	if _, _, ok := ParseTokenKey(title); ok {
 		return true
 	}
