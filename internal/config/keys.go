@@ -16,6 +16,9 @@ const (
 	KeyGmailNoSend    Key = "gmail_no_send"
 	KeyYoutubeAPIKey  Key = "youtube_api_key"
 	KeyPlacesAPIKey   Key = "places_api_key"
+	KeyOPBin          Key = "op_bin"
+	KeyOPVault        Key = "op_vault"
+	KeyOPTokenFile    Key = "op_token_file"
 )
 
 type KeySpec struct {
@@ -33,6 +36,9 @@ var keyOrder = []Key{
 	KeyGmailNoSend,
 	KeyYoutubeAPIKey,
 	KeyPlacesAPIKey,
+	KeyOPBin,
+	KeyOPVault,
+	KeyOPTokenFile,
 }
 
 var keySpecs = map[Key]KeySpec{
@@ -138,6 +144,55 @@ var keySpecs = map[Key]KeySpec{
 		},
 		EmptyHint: func() string {
 			return "(not set; set for Places API: config set places_api_key KEY or GOG_PLACES_API_KEY)"
+		},
+	},
+	KeyOPBin: {
+		Key: KeyOPBin,
+		Get: func(cfg File) string {
+			return cfg.OPBin
+		},
+		Set: func(cfg *File, value string) error {
+			cfg.OPBin = value
+			return nil
+		},
+		Unset: func(cfg *File) {
+			cfg.OPBin = ""
+		},
+		EmptyHint: func() string {
+			return "(not set; defaults to 'op' on PATH)"
+		},
+	},
+	KeyOPVault: {
+		Key: KeyOPVault,
+		Get: func(cfg File) string {
+			return cfg.OPVault
+		},
+		Set: func(cfg *File, value string) error {
+			cfg.OPVault = value
+			return nil
+		},
+		Unset: func(cfg *File) {
+			cfg.OPVault = ""
+		},
+		EmptyHint: func() string {
+			return "(not set; required for onepassword backend)"
+		},
+	},
+	KeyOPTokenFile: {
+		Key:       KeyOPTokenFile,
+		Sensitive: true,
+		Get: func(cfg File) string {
+			return cfg.OPTokenFile
+		},
+		Set: func(cfg *File, value string) error {
+			cfg.OPTokenFile = value
+			return nil
+		},
+		Unset: func(cfg *File) {
+			cfg.OPTokenFile = ""
+		},
+		EmptyHint: func() string {
+			return "(not set; path to 1Password service-account token file)"
 		},
 	},
 }

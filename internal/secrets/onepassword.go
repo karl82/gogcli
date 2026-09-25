@@ -594,6 +594,9 @@ func (k *onePasswordKeyring) Set(item keyring.Item) error {
 	if uuid == "" {
 		err = k.createItem(item.Key, string(item.Data))
 	} else {
+		if !k.isGogOwnedTitle(item.Key) {
+			return fmt.Errorf("refusing to edit non-gog vault item %q: title matches but item was not created by gog", item.Key)
+		}
 		err = k.editItem(uuid, string(item.Data))
 	}
 	if err != nil {
@@ -724,6 +727,9 @@ func (k *onePasswordKeyring) removePhysicalAlias(key string) error {
 	if uuid == "" {
 		return fmt.Errorf("%w: no 1Password item for %q", keyring.ErrKeyNotFound, key)
 	}
+	if !k.isGogOwnedTitle(key) {
+		return fmt.Errorf("refusing to delete non-gog vault item %q: title matches but item was not created by gog", key)
+	}
 	args := append([]string{"item", "delete", uuid}, k.vaultArgs()...)
 	if _, err := k.runOp(context.Background(), args...); err != nil {
 		return err
@@ -783,6 +789,10 @@ func onePasswordTokenAlias(key string) bool {
 }
 
 func (k *onePasswordKeyring) getTokenBySubject(alias, subject string) (keyring.Item, error) {
+	// Extract the requested client from the alias to avoid returning a token
+	// stored for a different OAuth client of the same user.
+	requestedClient, _, _ := parseSubjectTokenKey(alias)
+
 	items, err := k.list()
 	if err != nil {
 		return keyring.Item{}, err
@@ -790,6 +800,9 @@ func (k *onePasswordKeyring) getTokenBySubject(alias, subject string) (keyring.I
 	for title, uuid := range items {
 		client, _, ok := ParseTokenKey(title)
 		if !ok || !onePasswordCanonicalTokenKey(title) || client == "" {
+			continue
+		}
+		if requestedClient != "" && client != requestedClient {
 			continue
 		}
 		item, err := k.fetchByUUID(uuid)
@@ -809,6 +822,20 @@ func (k *onePasswordKeyring) getTokenBySubject(alias, subject string) (keyring.I
 func onePasswordCanonicalTokenKey(key string) bool {
 	client, email, ok := ParseTokenKey(key)
 	return ok && client != "" && email != "" && key == tokenKey(client, email)
+}
+
+// isGogOwnedTitle checks whether a vault item title matches gog's naming
+// convention (token:<backend>:<email> or client/<backend>/<id>/client-secret).
+// This prevents editing or deleting unrelated vault items that happen to share
+// a title with a gog key.
+func (k *onePasswordKeyring) isGogOwnedTitle(title string) bool {
+	if _, _, ok := ParseTokenKey(title); ok {
+		return true
+	}
+	if strings.HasPrefix(title, "client/") && strings.HasSuffix(title, "/client-secret") {
+		return true
+	}
+	return false
 }
 
 func firstLine(s string) string {
